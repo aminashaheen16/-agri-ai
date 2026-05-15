@@ -40,7 +40,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('إنشاء حساب جديد', style: TextStyle(fontFamily: 'Cairo')),
         backgroundColor: Colors.transparent,

@@ -34,6 +34,7 @@
 - **Frontend:** Flutter (Riverpod for state management)
 - **Backend:** Supabase (Auth, PostgreSQL, Real-time Database)
 - **AI Engine:** Groq Cloud API (Llama-3 models)
+- **Disease Detection Model:** Trained on custom datasets (Kaggle Notebook: [Plant Disease Detection](https://www.kaggle.com/code/ayana16/graduation-project))
 - **IoT/Hardware:** ESP32 (Arduino C++) & Python Simulation
 - **Payments:** PayPal API
 

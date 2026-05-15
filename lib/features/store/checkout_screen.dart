@@ -137,7 +137,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Future<void> _handleCheckout() async {
     setState(() => _isProcessing = true);
     try {
-      await ref.read(cartServiceProvider).checkout(widget.totalAmount);
+      await ref.read(cartServiceProvider).clearCart();
       
       // Send order notification
       await ref.read(notificationServiceProvider).sendNotification(

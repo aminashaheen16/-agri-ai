@@ -226,6 +226,7 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
         name: widget.name,
         price: double.parse(widget.price),
         imageUrl: widget.image,
+        category: 'عام',
       );
       await ref.read(cartServiceProvider).addToCart(product);
       if (mounted) {

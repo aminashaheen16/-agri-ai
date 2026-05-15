@@ -8,7 +8,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
-import 'features/dashboard/main_navigation_wrapper.dart';
 import 'core/services/notification_service.dart';
 import 'features/auth/splash_screen.dart';
 import 'core/providers/settings_provider.dart';

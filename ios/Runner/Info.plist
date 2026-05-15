@@ -76,5 +76,10 @@
 	<string>This app needs Bluetooth access to communicate with soil monitoring hardware.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs location access to provide accurate local weather and farming advice.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

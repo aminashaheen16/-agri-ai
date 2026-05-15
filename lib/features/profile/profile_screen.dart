@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/widgets/floating_quick_nav.dart';
+import '../auth/login_screen.dart';
 
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -190,12 +191,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('الملف الشخصي', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: theme.colorScheme.onBackground,
+        foregroundColor: theme.colorScheme.onSurface,
       ),
       floatingActionButton: const FloatingQuickNav(),
 
@@ -320,7 +321,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onBackground.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -339,7 +340,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   _buildMenuItem(context, 'تسجيل الخروج', Icons.logout, isDestructive: true, onTap: () async {
                     await _supabase.auth.signOut();
                     if (mounted) {
-                      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                  Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (route) => false,
+                    );
                     }
                   }),
                 ],

@@ -1,218 +1,373 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide Provider;
+import 'package:uuid/uuid.dart';
 import '../services/groq_service.dart';
-import '../constants/app_constants.dart';
+import '../services/chat_storage_service.dart';
+import '../../features/store/product_service.dart';
 
-final groqServiceProvider = Provider<GroqService>((ref) {
-  return GroqService();
-});
+final groqServiceProvider = Provider<GroqService>((ref) => GroqService());
+final chatStorageServiceProvider = Provider<ChatStorageService>((ref) => ChatStorageService());
 
 class ChatMessage {
+  final String id;
+  final String chatId;
+  final String role;
   final String content;
-  final bool isUser;
-  final DateTime timestamp;
+  final DateTime createdAt;
+  final List<Product> recommendedProducts;
+  final bool showScannerSuggestion;
 
-  ChatMessage({required this.content, required this.isUser, required this.timestamp});
+  ChatMessage({
+    required this.id,
+    required this.chatId,
+    required this.role,
+    required this.content,
+    required this.createdAt,
+    this.recommendedProducts = const [],
+    this.showScannerSuggestion = false,
+  });
 
-  Map<String, dynamic> toJson(String sessionId) {
-    return {
-      'session_id': sessionId,
-      'content': content,
-      'is_user': isUser,
-      'created_at': timestamp.toIso8601String(),
-    };
+  bool get isUser => role == 'user';
+
+  String get cleanContent {
+    return content
+        .replaceAll('**', '')
+        .replaceAll('*', '')
+        .replaceAll('##', '')
+        .replaceAll('#', '')
+        .trim();
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'chat_id': chatId,
+    'role': role,
+    'content': content,
+    'created_at': createdAt.toIso8601String(),
+    'show_scanner_suggestion': showScannerSuggestion,
+  };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+    id: json['id'] ?? const Uuid().v4(),
+    chatId: json['chat_id'] ?? '',
+    role: json['role'] ?? (json['is_user'] == true ? 'user' : 'assistant'),
+    content: json['content'] ?? '',
+    createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+    recommendedProducts: [],
+    showScannerSuggestion: json['show_scanner_suggestion'] ?? false,
+  );
+}
+
+class ChatSession {
+  final String id;
+  final String title;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<ChatMessage> messages;
+
+  ChatSession({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.messages,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'chat_id': id, // Alias for older compatibility if needed
+    'title': title,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+  };
+
+  factory ChatSession.fromJson(Map<String, dynamic> json, [List<ChatMessage> messages = const []]) => ChatSession(
+    id: json['id'],
+    title: json['title'] ?? 'محادثة جديدة',
+    createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+    updatedAt: DateTime.parse(json['updated_at'] ?? DateTime.now().toIso8601String()),
+    messages: messages,
+  );
+
+  ChatSession copyWith({String? title, List<ChatMessage>? messages, DateTime? updatedAt}) {
+    return ChatSession(
+      id: id,
+      title: title ?? this.title,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      messages: messages ?? this.messages,
+    );
   }
 }
 
 class ChatState {
-  final List<ChatMessage> messages;
+  final List<ChatSession> sessions;
+  final String? activeSessionId;
   final bool isLoading;
-  final String conversationTitle;
-  final String? currentSessionId;
+  final String streamingResponse;
+  final List<Product> pendingRecommendations;
 
   ChatState({
-    required this.messages,
-    required this.isLoading,
-    this.conversationTitle = 'المساعد الذكي',
-    this.currentSessionId,
+    required this.sessions,
+    this.activeSessionId,
+    this.isLoading = false,
+    this.streamingResponse = '',
+    this.pendingRecommendations = const [],
   });
 
+  ChatSession? get activeSession {
+    if (activeSessionId == null) return null;
+    try {
+      return sessions.firstWhere((s) => s.id == activeSessionId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   ChatState copyWith({
-    List<ChatMessage>? messages,
+    List<ChatSession>? sessions,
+    String? activeSessionId,
     bool? isLoading,
-    String? conversationTitle,
-    String? currentSessionId,
+    String? streamingResponse,
+    List<Product>? pendingRecommendations,
   }) {
     return ChatState(
-      messages: messages ?? this.messages,
+      sessions: sessions ?? this.sessions,
+      activeSessionId: activeSessionId ?? this.activeSessionId,
       isLoading: isLoading ?? this.isLoading,
-      conversationTitle: conversationTitle ?? this.conversationTitle,
-      currentSessionId: currentSessionId ?? this.currentSessionId,
+      streamingResponse: streamingResponse ?? this.streamingResponse,
+      pendingRecommendations: pendingRecommendations ?? this.pendingRecommendations,
     );
   }
 }
 
 class ChatNotifier extends StateNotifier<ChatState> {
   final GroqService _groqService;
+  final ChatStorageService _storageService;
   final _supabase = Supabase.instance.client;
-  bool _titleGenerated = false;
+  final _uuid = const Uuid();
 
-  ChatNotifier(this._groqService)
-      : super(ChatState(messages: [], isLoading: false)) {
-    _initChat();
+  ChatNotifier(this._groqService, this._storageService) 
+      : super(ChatState(sessions: [])) {
+    _init();
   }
 
-  Future<void> _initChat() async {
-    if (state.isLoading) return;
-    
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) {
-      return;
+  Future<void> _init() async {
+    final localSessions = await _storageService.loadChats();
+    if (localSessions.isNotEmpty) {
+      state = state.copyWith(sessions: localSessions, activeSessionId: localSessions.first.id);
     }
+    await syncWithSupabase();
+  }
 
-    state = state.copyWith(isLoading: true);
-
+  Future<void> syncWithSupabase() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
     try {
-      final sessionResponse = await _supabase
-          .from('chat_sessions')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
-
-      if (sessionResponse != null) {
-        final sessionId = sessionResponse['id'];
-        final title = sessionResponse['title'] ?? 'المساعد الذكي';
-        
-        // Load messages
-        final messagesResponse = await _supabase
-            .from('chat_messages')
-            .select()
-            .eq('session_id', sessionId)
-            .order('created_at', ascending: true);
-
-        final loadedMessages = (messagesResponse as List).map((m) {
-          return ChatMessage(
-            content: m['content'],
-            isUser: m['is_user'],
-            timestamp: DateTime.parse(m['created_at']),
-          );
-        }).toList();
-
-        state = state.copyWith(
-          messages: loadedMessages,
-          currentSessionId: sessionId,
-          conversationTitle: title,
-          isLoading: false,
-        );
-        _titleGenerated = true;
-      } else {
-        // No session found, start fresh
-        clearChat();
+      final chatsResponse = await _supabase.from('chats').select().order('updated_at', ascending: false);
+      List<ChatSession> remoteSessions = [];
+      for (var chatJson in chatsResponse) {
+        final messagesResponse = await _supabase.from('messages').select().eq('chat_id', chatJson['id']).order('created_at', ascending: true);
+        final messages = (messagesResponse as List).map((m) => ChatMessage.fromJson(m)).toList();
+        remoteSessions.add(ChatSession.fromJson(chatJson, messages));
+      }
+      if (remoteSessions.isNotEmpty) {
+        state = state.copyWith(sessions: remoteSessions, activeSessionId: state.activeSessionId ?? remoteSessions.first.id);
+        _saveLocal();
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false);
-      clearChat();
+      print('Supabase Sync Error: $e');
     }
   }
 
-  List<Map<String, String>> _buildHistory() {
-    return state.messages.map((m) {
-      return {
-        'role': m.isUser ? 'user' : 'assistant',
-        'content': m.content,
-      };
-    }).toList();
+  void createNewChat() async {
+    final id = _uuid.v4();
+    final newSession = ChatSession(
+      id: id,
+      title: 'محادثة جديدة',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      messages: [
+        ChatMessage(
+          id: _uuid.v4(),
+          chatId: id,
+          role: 'assistant',
+          content: 'مرحباً! أنا المساعد الذكي، كيف يمكنني مساعدتك اليوم؟',
+          createdAt: DateTime.now(),
+        ),
+      ],
+    );
+    state = state.copyWith(sessions: [newSession, ...state.sessions], activeSessionId: newSession.id, streamingResponse: '');
+    _saveLocal();
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      try {
+        await _supabase.from('chats').insert({'id': newSession.id, 'title': newSession.title, 'user_id': user.id, 'created_at': newSession.createdAt.toIso8601String(), 'updated_at': newSession.updatedAt.toIso8601String()});
+        await _supabase.from('messages').insert(newSession.messages.first.toJson());
+      } catch (e) {
+        print('Supabase Save Error: $e');
+      }
+    }
+  }
+
+  void setActiveSession(String id) {
+    state = state.copyWith(activeSessionId: id, streamingResponse: '', pendingRecommendations: []);
+  }
+
+  void deleteSession(String id) async {
+    final newSessions = state.sessions.where((s) => s.id != id).toList();
+    String? newActiveId = state.activeSessionId;
+    if (id == state.activeSessionId) {
+      newActiveId = newSessions.isNotEmpty ? newSessions.first.id : null;
+    }
+    state = state.copyWith(sessions: newSessions, activeSessionId: newActiveId);
+    if (newSessions.isEmpty) createNewChat();
+    _saveLocal();
+    try {
+      await _supabase.from('chats').delete().eq('id', id);
+    } catch (e) {
+      print('Supabase Delete Error: $e');
+    }
   }
 
   Future<void> sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
-
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
-
-    // Create session if not exists
-    String? sessionId = state.currentSessionId;
-    if (sessionId == null) {
-      final newSession = await _supabase.from('chat_sessions').insert({
-        'user_id': userId,
-        'title': 'محادثة جديدة',
-      }).select().single();
-      sessionId = newSession['id'];
-      state = state.copyWith(currentSessionId: sessionId);
-    }
+    if (text.trim().isEmpty || state.isLoading) return;
+    
+    final currentSession = state.activeSession;
+    if (currentSession == null) return;
 
     final userMessage = ChatMessage(
+      id: _uuid.v4(),
+      chatId: currentSession.id,
+      role: 'user',
       content: text,
-      isUser: true,
-      timestamp: DateTime.now(),
+      createdAt: DateTime.now(),
     );
 
-    // Save user message to Supabase
-    await _supabase.from('chat_messages').insert(userMessage.toJson(sessionId!));
+    final updatedMessages = [...currentSession.messages, userMessage];
+    _updateActiveSession(messages: updatedMessages, updatedAt: DateTime.now());
+    state = state.copyWith(isLoading: true, streamingResponse: '', pendingRecommendations: []);
 
-    final history = _buildHistory();
-    state = state.copyWith(
-      messages: [...state.messages, userMessage],
-      isLoading: true,
-    );
+    _saveMessageToSupabase(userMessage);
 
     try {
-      final response = await _groqService.getChatResponse(text, history);
-      final botMessage = ChatMessage(
-        content: response,
-        isUser: false,
-        timestamp: DateTime.now(),
-      );
-
-      // Save bot response to Supabase
-      await _supabase.from('chat_messages').insert(botMessage.toJson(sessionId));
-
-      state = state.copyWith(
-        messages: [...state.messages, botMessage],
-        isLoading: false,
-      );
-
-      if (!_titleGenerated) {
-        _titleGenerated = true;
-        final title = await _groqService.generateTitle(text);
-        await _supabase.from('chat_sessions').update({'title': title}).eq('id', sessionId);
-        state = state.copyWith(conversationTitle: title);
+      if (currentSession.messages.length == 1) {
+        final words = text.split(' ');
+        final title = words.length > 5 ? '${words.take(5).join(' ')}...' : text;
+        _updateActiveSession(title: title);
+        _updateChatTitleInSupabase(currentSession.id, title);
       }
-    } catch (e) {
-      state = state.copyWith(isLoading: false);
-      final errorMessage = ChatMessage(
-        content: 'عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى لاحقاً. ⚠️',
-        isUser: false,
-        timestamp: DateTime.now(),
+
+      final historyMap = updatedMessages.map((m) => {'role': m.role, 'content': m.content}).toList();
+      
+      String diagnosis = '';
+      await for (final chunk in _groqService.getChatResponseStream("قدم تشخيصاً مختصراً جداً (كلمات مفتاحية) للمشكلة التالية: $text", historyMap.sublist(0, historyMap.length - 1))) {
+        diagnosis += chunk;
+      }
+
+      final relevantProducts = await _searchRelevantProducts(diagnosis + " " + text);
+      state = state.copyWith(pendingRecommendations: relevantProducts);
+
+      // Visual Problem Detection
+      final visualKeywords = ['أوراق', 'ورق', 'ورقة', 'اصفرار', 'تحول اللون', 'بقع', 'مرض', 'عفن', 'تلف', 'حشرات', 'شكل غريب', 'تشوه', 'لون', 'مظهر'];
+      bool isVisualProblem = visualKeywords.any((kw) => text.contains(kw) || diagnosis.contains(kw));
+
+      String productContext = '';
+      if (relevantProducts.isNotEmpty) {
+        productContext = "\n\nالمنتجات المتاحة في متجرنا التي تناسب هذه المشكلة:\n" + 
+            relevantProducts.map((p) => "- ${p.name}: ${p.description} - السعر: ${p.price} جنيه").join('\n');
+      }
+
+      String systemHint = "\n\n[تعليق النظام: يرجى التوصية بالمنتجات التالية بشكل طبيعي في إجابتك: $productContext]";
+      if (isVisualProblem) {
+        systemHint += "\nأيضاً، اقترح على المستخدم استخدام ميزة 'فحص النبات' في التطبيق للحصول على تشخيص أدق بالصورة.";
+      }
+
+      final finalPrompt = text + systemHint;
+
+      String fullResponse = '';
+      await for (final chunk in _groqService.getChatResponseStream(finalPrompt, historyMap.sublist(0, historyMap.length - 1))) {
+        fullResponse += chunk;
+        state = state.copyWith(streamingResponse: fullResponse);
+      }
+
+      final botMessage = ChatMessage(
+        id: _uuid.v4(),
+        chatId: currentSession.id,
+        role: 'assistant',
+        content: fullResponse,
+        createdAt: DateTime.now(),
+        recommendedProducts: relevantProducts,
+        showScannerSuggestion: isVisualProblem,
       );
-      state = state.copyWith(messages: [...state.messages, errorMessage]);
+
+      _updateActiveSession(messages: [...updatedMessages, botMessage], updatedAt: DateTime.now());
+      state = state.copyWith(isLoading: false, streamingResponse: '');
+      _saveLocal();
+      _saveMessageToSupabase(botMessage);
+    } catch (e) {
+      print('Error in sendMessage: $e');
+      state = state.copyWith(isLoading: false);
     }
   }
 
-  void clearChat() async {
-    _titleGenerated = false;
-    state = ChatState(
-      messages: [
-        ChatMessage(
-          content: 'مرحباً بك في مساعد Agri.AI الذكي! 🌿\nكيف يمكنني مساعدتك اليوم؟',
-          isUser: false,
-          timestamp: DateTime.now(),
-        ),
-      ],
-      isLoading: false,
-      conversationTitle: 'المساعد الذكي',
-      currentSessionId: null,
-    );
+  Future<List<Product>> _searchRelevantProducts(String text) async {
+    try {
+      String? searchKey;
+      if (text.contains('نيتروجين') || text.contains('اصفرار') || text.contains('سماد')) {
+        searchKey = 'سماد';
+      } else if (text.contains('حشرات') || text.contains('آفات') || text.contains('مبيد') || text.contains('ذباب')) {
+        searchKey = 'مبيد';
+      } else if (text.contains('تربة') || text.contains('جذور') || text.contains('خرطوم')) {
+        searchKey = 'تربة';
+      } else if (text.contains('بذور') || text.contains('زراعة') || text.contains('شتلات')) {
+        searchKey = 'بذور';
+      }
+      if (searchKey == null) searchKey = text.split(' ').first;
+
+      final response = await _supabase.from('products').select('*').or('description.ilike.%$searchKey%,name.ilike.%$searchKey%').limit(3);
+      return (response as List).map((p) => Product.fromJson(p)).toList();
+    } catch (e) {
+      print('Supabase Product Search Error: $e');
+      return [];
+    }
   }
 
-  void refreshChat() {
-    _initChat();
+  Future<void> _saveMessageToSupabase(ChatMessage message) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    try {
+      await _supabase.from('messages').insert(message.toJson());
+    } catch (e) {
+      print('Supabase Message Save Error: $e');
+    }
+  }
+
+  Future<void> _updateChatTitleInSupabase(String chatId, String title) async {
+    try {
+      await _supabase.from('chats').update({'title': title}).eq('id', chatId);
+    } catch (e) {
+      print('Supabase Title Update Error: $e');
+    }
+  }
+
+  void _updateActiveSession({String? title, List<ChatMessage>? messages, DateTime? updatedAt}) {
+    final updatedSessions = state.sessions.map((s) {
+      if (s.id == state.activeSessionId) {
+        return s.copyWith(title: title, messages: messages, updatedAt: updatedAt);
+      }
+      return s;
+    }).toList();
+    state = state.copyWith(sessions: updatedSessions);
+  }
+
+  Future<void> _saveLocal() async {
+    await _storageService.saveChats(state.sessions);
   }
 }
 
 final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
   final groqService = ref.watch(groqServiceProvider);
-  return ChatNotifier(groqService);
+  final storageService = ref.watch(chatStorageServiceProvider);
+  return ChatNotifier(groqService, storageService);
 });

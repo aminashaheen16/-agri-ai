@@ -13,6 +13,7 @@ import '../../features/store/favorites_screen.dart';
 import '../../features/plant_health/plant_health_screen.dart';
 import '../../features/ai_chat/chat_screen.dart';
 import '../../core/providers/settings_provider.dart';
+import '../../features/auth/login_screen.dart';
 
 class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key});
@@ -272,7 +273,10 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                 _buildItem(context, Icons.logout_rounded, isAr ? 'تسجيل الخروج' : 'Logout', () async {
                   await _supabase.auth.signOut();
                   if (mounted) {
-                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (route) => false,
+                    );
                   }
                 }),
               ],

@@ -7,7 +7,7 @@ class AppConstants {
   
   // Groq API Configuration
   static String get groqApiKey => dotenv.get('GROQ_API_KEY', fallback: '');
-  static String get groqModel => dotenv.get('GROQ_MODEL', fallback: 'llama3-70b-8192');
+  static String get groqModel => dotenv.get('GROQ_MODEL', fallback: 'llama-3.3-70b-versatile');
   static const String groqBaseUrl = 'https://api.groq.com/openai/v1';
   
   // App Configuration

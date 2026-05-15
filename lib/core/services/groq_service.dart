@@ -1,71 +1,124 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_constants.dart';
 
 class GroqService {
-  final _supabase = Supabase.instance.client;
+  final String _baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
 
-  Future<String> getChatResponse(String prompt, List<Map<String, String>> history) async {
+  Stream<String> getChatResponseStream(String prompt, List<Map<String, String>> history) async* {
+    print('GroqService: Starting chat response stream...');
     try {
-      // جلب قائمة المنتجات ليرشحها الشات بوت (كما في النسخة القديمة)
-      final productResponse = await _supabase
-          .from('products_with_price')
-          .select('name, description, price_egp')
-          .limit(15);
-      
-      final List<dynamic> products = productResponse as List<dynamic>;
-      
-      String productsList = products.map((p) => 
-        "- ${p['name']} (السعر: ${p['price_egp']} ج.م)"
-      ).join("\n");
-
       final List<Map<String, String>> messages = [
         {
           'role': 'system',
-          'content': '''أنت "دكتور زراعي" خبير وبشري متخصص جداً في تطبيق Soil For Soul (Agri AI). 
-شخصيتك: ودود، ذكي، خبير زراعي حقيقي، وتفتخر جداً بمشروعنا. 
-مهمتك: مساعدة المزارعين في حل مشاكل نباتاتهم وتقديم نصائح احترافية بلهجة مصرية عامية ودودة.
-
-قواعد هامة:
-1. الذاكرة: تذكر دائماً ما قاله المستخدم وكن مترابطاً.
-2. المتجر: إليك قائمة بالمنتجات المتوفرة في متجرنا حالياً:
-$productsList
-
-3. التوصيات: عندما تقترح علاجاً، ابحث في قائمة المنتجات أعلاه. إذا وجد منتج مناسب، رشحه بالاسم والسعر، وقل له: "المنتج ده موجود عندنا في الستور وممكن يوصلك لحد البيت".
-4. الأسلوب: تكلم بلهجة مصرية عامية (كأنك دكتور بشري متخصص).
-5. ممنوع الهلوسة: إذا كنت لا تعرف معلومة، قل لا أعرف ولا تخترع منتجات غير موجودة.
-6. سؤاله في النهاية: دائماً اسأل المستخدم إذا كان يحتاج مساعدة في شيء آخر.'''
+          'content': 'أنت مساعد زراعي ذكي متخصص حصراً في المجال الزراعي. أجب فقط على الأسئلة المتعلقة بالزراعة والنباتات والتربة والري والأمراض الزراعية والمحاصيل. إذا سألك المستخدم عن أي موضوع آخر، اعتذر بلطف وأخبره أنك متخصص في الزراعة فقط. اجعل إجاباتك مختصرة وعملية ومفيدة.'
         },
         ...history,
         {'role': 'user', 'content': prompt}
       ];
 
+      final request = http.Request('POST', Uri.parse(_baseUrl));
+      request.headers.addAll({
+        'Authorization': 'Bearer ${AppConstants.groqApiKey}',
+        'Content-Type': 'application/json',
+      });
+      
+      request.body = jsonEncode({
+        'model': AppConstants.groqModel,
+        'messages': messages,
+        'max_tokens': 1024,
+        'temperature': 0.7,
+        'stream': true,
+      });
+
+      final client = http.Client();
+      final response = await client.send(request);
+
+      if (response.statusCode == 200) {
+        await for (var line in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
+          if (line.trim().isEmpty) continue;
+          if (line.startsWith('data: ')) {
+            final data = line.substring(6);
+            if (data == '[DONE]') break;
+            try {
+              final json = jsonDecode(data);
+              final content = json['choices'][0]['delta']['content'] as String?;
+              if (content != null) {
+                yield content;
+              }
+            } catch (e) {
+              print('GroqService: Error decoding stream chunk: $e');
+            }
+          }
+        }
+      } else {
+        final errorBody = await response.stream.bytesToString();
+        print('GroqService: API Error Body: $errorBody');
+        yield 'عذراً، حدث خطأ في الاتصال بالمساعد الذكي. (كود: ${response.statusCode})';
+      }
+    } catch (e) {
+      print('GroqService: Exception: $e');
+      yield 'عذراً، حدث خطأ غير متوقع. ($e)';
+    }
+  }
+
+  Future<String> getSingleResponse(String prompt) async {
+    try {
       final response = await http.post(
-        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        Uri.parse(_baseUrl),
         headers: {
           'Authorization': 'Bearer ${AppConstants.groqApiKey}',
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'model': 'llama-3.1-70b-versatile', // استخدام موديل قوي وذكي جداً
-          'messages': messages,
-          'max_tokens': 1024,
-          'temperature': 0.7,
+          'model': AppConstants.groqModel,
+          'messages': [
+            {'role': 'user', 'content': prompt}
+          ],
+          'max_tokens': 500,
+          'temperature': 0.5,
         }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['choices'][0]['message']['content'] as String;
-      } else {
-        final err = jsonDecode(response.body);
-        print('Groq Error: $err');
-        return "أنا أسف جداً، في مشكلة بسيطة في الاتصال. ممكن تحاول تبعت رسالتك تاني؟";
+        return (data['choices'][0]['message']['content'] as String).trim();
       }
+      return 'عذراً، تعذر الحصول على تحليل إضافي حالياً.';
     } catch (e) {
-      print('Chat Service Exception: $e');
-      return "أهلاً بك! أنا الدكتور الزراعي، للأسف واجهت مشكلة في الاتصال حالياً. هل يمكنك المحاولة مرة أخرى؟";
+      return 'عذراً، حدث خطأ في الحصول على التحليل.';
+    }
+  }
+
+  Future<String> generateTitle(String firstMessage) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Authorization': 'Bearer ${AppConstants.groqApiKey}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': AppConstants.groqModel,
+          'messages': [
+            {
+              'role': 'system',
+              'content': 'أنت مساعد. قم بتوليد عنوان قصير جداً (أقل من 5 كلمات) يلخص سؤال المستخدم التالي باللغة العربية. أعطني العنوان فقط بدون أي شرح أو علامات تنصيص.'
+            },
+            {'role': 'user', 'content': firstMessage}
+          ],
+          'max_tokens': 20,
+          'temperature': 0.5,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['choices'][0]['message']['content'] as String).trim().replaceAll('"', '');
+      }
+      return 'محادثة جديدة';
+    } catch (e) {
+      return 'محادثة جديدة';
     }
   }
 }
