@@ -84,6 +84,13 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
     // 5. Save to Supabase Storage & Database (Background)
     _saveScanToHistory(imageFile, bytes, diseaseName, aiExplanation, isHealthy);
 
+    // 6. Send notification
+    ref.read(notificationServiceProvider).addNotification(
+      title: 'اكتمل تحليل النبتة 🌿',
+      body: 'تم تحليل نبتتك بنجاح. الحالة: ${isHealthy ? "سليمة" : "تحتاج عناية"}. اضغط لعرض التفاصيل.',
+      type: 'زراعية',
+    );
+
     if (mounted) {
       setState(() {
         _detectedDisease = diseaseName;

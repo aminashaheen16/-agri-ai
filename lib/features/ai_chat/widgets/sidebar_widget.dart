@@ -10,6 +10,8 @@ import '../../profile/about_app_screen.dart';
 import '../../profile/settings_screen.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../profile/address_management_screen.dart';
+import '../../store/order_tracking_screen.dart';
 
 class ChatSidebar extends ConsumerWidget {
   const ChatSidebar({super.key});
@@ -92,6 +94,22 @@ class ChatSidebar extends ConsumerWidget {
             onTap: () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const FavoritesScreen()));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.location_on_outlined, color: Colors.orange),
+            title: const Text('تفاصيل العنوان', style: TextStyle(fontFamily: 'Cairo')),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const AddressManagementScreen()));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.local_shipping_outlined, color: Colors.blue),
+            title: const Text('متابعة الطلبات', style: TextStyle(fontFamily: 'Cairo')),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const OrderTrackingScreen()));
             },
           ),
           

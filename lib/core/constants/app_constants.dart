@@ -24,10 +24,10 @@ class AppConstants {
   static const String esp32ServiceUuid = '00001101-0000-1000-8000-00805F9B34FB';
   static const String esp32CharacteristicUuid = '00001101-0000-1000-8000-00805F9B34FB';
   
-  // PayPal Configuration
-  static const String paypalClientId = 'your-paypal-client-id-here';
-  static const String paypalSecret = 'your-paypal-secret-here';
-  static const bool paypalSandbox = true;
+  // Paymob Configuration
+  static const String paymobApiKey = 'ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2ljSEp2Wm1sc1pWOXdheUk2TVRFMU1ETXdPU3dpYm1GdFpTSTZJbWx1YVhScFlXd2lmUS5rVFMwNmd3ZDF4VlBQZXdjTDluM1dQZnNVb1NhcFR3c2hma3VxVUdWcEEzRjhuY2F3MFNhcE1JVmZVWks0YnJKT1JkeVUyV3JVaHBEcFlrR29QX2JoZw==';
+  static const String paymobIntegrationId = '5604537';
+  static const String paymobIframeId = '1029248';
   
   // Firebase Configuration
   static const String firebaseServerKey = 'your-firebase-server-key-here';

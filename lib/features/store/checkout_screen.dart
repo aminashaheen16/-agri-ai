@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/services/cart_service.dart';
-import '../../core/services/notification_service.dart';
+import 'package:agri_ai/core/services/cart_service.dart';
+import 'package:agri_ai/core/services/notification_service.dart';
+import 'package:agri_ai/core/services/paymob_service.dart';
+import 'package:agri_ai/core/providers/address_provider.dart';
+import 'package:agri_ai/core/providers/order_provider.dart';
+import 'package:agri_ai/core/providers/profile_provider.dart';
+import 'package:agri_ai/features/profile/address_management_screen.dart';
+import 'package:agri_ai/features/store/paymob_webview.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   final double totalAmount;
@@ -12,11 +18,15 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  int _paymentMethod = 0; // 0 for Credit Card, 1 for Cash
+  int _paymentMethod = 0; // 0 for Paymob, 1 for Cash
   bool _isProcessing = false;
+  String? _selectedAddressId;
+  final PaymobService _paymobService = PaymobService();
 
   @override
   Widget build(BuildContext context) {
+    final addressesAsync = ref.watch(addressProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -33,68 +43,70 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('معلومات الشحن والتوصيل', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF1B3022))),
+                const Text('عنوان التوصيل', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF1B3022))),
                 const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(child: _buildTextField('الدولة', 'مصر', Icons.public)),
-                    const SizedBox(width: 15),
-                    Expanded(child: _buildTextField('المحافظة', 'القاهرة', Icons.map)),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                _buildTextField('المدينة / المنطقة', '', Icons.location_city),
-                const SizedBox(height: 15),
-                _buildTextField('اسم الشارع', '', Icons.edit_road),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(child: _buildTextField('رقم العمارة', '', Icons.apartment)),
-                    const SizedBox(width: 15),
-                    Expanded(child: _buildTextField('الدور', '', Icons.layers)),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                _buildTextField('رقم الهاتف للتواصل', '', Icons.phone_android),
-                const SizedBox(height: 25),
+                
+                addressesAsync.when(
+                  data: (addresses) {
+                    if (addresses.isEmpty) {
+                      return _buildEmptyAddress(context);
+                    }
+                    _selectedAddressId ??= addresses.firstWhere((a) => a.isDefault, orElse: () => addresses.first).id;
 
-                const Text('تحديد موعد التوصيل', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF1B3022))),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(child: _buildSelectionField('التاريخ', '14/5/2026', Icons.calendar_today)),
-                    const SizedBox(width: 15),
-                    Expanded(child: _buildSelectionField('الساعة', '10:00 AM', Icons.access_time)),
-                  ],
+                    return Column(
+                      children: [
+                        ...addresses.map((addr) => _buildAddressSelectionTile(addr)),
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressManagementScreen())),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('إضافة عنوان جديد', style: TextStyle(fontFamily: 'Cairo')),
+                        ),
+                      ],
+                    );
+                  },
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Text('Error loading addresses: $e'),
                 ),
-                const SizedBox(height: 25),
 
+                const SizedBox(height: 25),
                 const Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF1B3022))),
                 const SizedBox(height: 15),
                 Row(
                   children: [
                     Expanded(
-                      child: _buildPaymentMethod(0, 'بطاقة بنكية', Icons.credit_card, _paymentMethod == 0),
+                      child: _buildPaymentMethod(0, 'الدفع بالبطاقة', Icons.credit_card, _paymentMethod == 0),
                     ),
                     const SizedBox(width: 15),
                     Expanded(
-                      child: _buildPaymentMethod(1, 'عند الاستلام', Icons.payments_outlined, _paymentMethod == 1),
+                      child: _buildPaymentMethod(1, 'الدفع عند الاستلام', Icons.payments_outlined, _paymentMethod == 1),
                     ),
                   ],
                 ),
                 const SizedBox(height: 25),
 
                 if (_paymentMethod == 0) ...[
-                  const Text('بيانات البطاقة', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
-                  const SizedBox(height: 10),
-                  _buildTextField('رقم البطاقة', '', Icons.credit_card),
-                  const SizedBox(height: 15),
-                  Row(
-                    children: [
-                      Expanded(child: _buildTextField('تاريخ الانتهاء', 'MM/YY', Icons.calendar_month)),
-                      const SizedBox(width: 15),
-                      Expanded(child: _buildTextField('CVV', '', Icons.lock_outline)),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blue.withOpacity(0.2))),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.security, color: Colors.blue, size: 20),
+                        SizedBox(width: 10),
+                        Expanded(child: Text('سيتم توجيهك إلى صفحة الدفع الآمنة (Paymob) لإتمام العملية بالبطاقة البنكية.', style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: Colors.blue))),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.green.withOpacity(0.2))),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.green, size: 20),
+                        SizedBox(width: 10),
+                        Expanded(child: Text('سيتم دفع المبلغ نقداً عند استلام الطلب من مندوب التوصيل.', style: TextStyle(fontSize: 12, fontFamily: 'Cairo', color: Colors.green))),
+                      ],
+                    ),
                   ),
                 ],
 
@@ -118,7 +130,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     minimumSize: const Size(double.infinity, 55),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   ),
-                  child: const Text('تأكيد وطلب المنتج الآن', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white)),
+                  child: Text(_paymentMethod == 0 ? 'الانتقال للدفع' : 'تأكيد الطلب الآن', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white)),
                 ),
                 const SizedBox(height: 50),
               ],
@@ -134,17 +146,151 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
+  Widget _buildEmptyAddress(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.orange.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.orange.withOpacity(0.2))),
+      child: Column(
+        children: [
+          const Text('لا يوجد عنوان شحن مسجل!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.orange)),
+          const SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressManagementScreen())),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('أضف عنوان للتوصيل', style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddressSelectionTile(AddressModel addr) {
+    final isSelected = _selectedAddressId == addr.id;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedAddressId = addr.id),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.green.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: isSelected ? Colors.green : Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.green : Colors.grey),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(addr.label, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  Text(addr.fullAddress, style: const TextStyle(fontSize: 12, color: Colors.black54), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleCheckout() async {
+    if (_selectedAddressId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى اختيار عنوان التوصيل', style: TextStyle(fontFamily: 'Cairo'))));
+      return;
+    }
+
+    if (_paymentMethod == 0) {
+      _startPaymobPayment();
+    } else {
+      _placeRealOrder();
+    }
+  }
+
+  Future<void> _startPaymobPayment() async {
     setState(() => _isProcessing = true);
     try {
-      await ref.read(cartServiceProvider).clearCart();
+      final profile = ref.read(profileProvider);
+      final addresses = ref.read(addressProvider).value;
+      final selectedAddr = addresses?.firstWhere((a) => a.id == _selectedAddressId);
+      final cartItems = ref.read(cartItemsProvider).value ?? [];
+
+      // 1. Auth
+      final token = await _paymobService.getAuthToken();
       
-      // Send order notification
-      await ref.read(notificationServiceProvider).sendNotification(
-        title: 'تم استلام طلبك! 🎉',
-        body: 'شكراً لثقتك في Agri.AI. تم استلام طلبك بنجاح وجاري تجهيزه للتوصيل. يمكنك متابعته من قسم الطلبات.',
-        type: 'order',
+      // 2. Create Order
+      final orderId = await _paymobService.createOrder(
+        token: token,
+        amount: widget.totalAmount,
+        items: cartItems.map((e) => {
+          'name': e.product.name,
+          'amount_cents': (e.product.price * 100).toInt().toString(),
+          'description': e.product.description ?? '',
+          'quantity': e.quantity.toString(),
+        }).toList(),
       );
+
+      // 3. Payment Key
+      final paymentKey = await _paymobService.getPaymentKey(
+        token: token,
+        orderId: orderId,
+        amount: widget.totalAmount,
+        billingData: {
+          'name': profile?.fullName ?? 'Guest',
+          'email': profile?.email ?? 'test@test.com',
+          'phone': profile?.phone ?? '01000000000',
+          'address': selectedAddr?.fullAddress ?? 'NA',
+        },
+      );
+
+      setState(() => _isProcessing = false);
+
+      // 4. Open WebView
+      final success = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => PaymobWebView(url: _paymobService.getPaymentUrl(paymentKey))),
+      );
+
+      if (success == true) {
+        _placeRealOrder();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشلت عملية الدفع، يرجى المحاولة مرة أخرى', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+        }
+      }
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في عملية الدفع: $e')));
+      }
+    }
+  }
+
+  Future<void> _placeRealOrder() async {
+    setState(() => _isProcessing = true);
+    try {
+      final cartItemsAsync = ref.read(cartItemsProvider);
+      final items = cartItemsAsync.maybeWhen(
+        data: (list) => list.map((e) => {
+          'id': e.product.id,
+          'name': e.product.name,
+          'price': e.product.price,
+          'quantity': e.quantity,
+          'image_url': e.product.imageUrl,
+        }).toList(),
+        orElse: () => <Map<String, dynamic>>[],
+      );
+
+      await ref.read(orderProvider.notifier).placeOrder(
+        items: items,
+        total: widget.totalAmount,
+        addressId: _selectedAddressId!,
+      );
+
+      await ref.read(cartServiceProvider).clearCart();
+      ref.invalidate(cartItemsProvider);
 
       if (mounted) {
         _showSuccessDialog(context);
@@ -170,74 +316,32 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'تم استلام طلبك! 🎉',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF1B3022)),
+            const Icon(Icons.check_circle, color: Colors.green, size: 60),
+            const SizedBox(height: 20),
+            Text(
+              _paymentMethod == 0 ? 'تم الدفع والاستلام بنجاح! 🎉' : 'تم استلام طلبك بنجاح! 🎉',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF1B3022)),
             ),
             const SizedBox(height: 15),
-            const Text(
-              'موعد التوصيل المتوقع: خلال 48 ساعة. شكراً لثقتك في Agri.AI. يمكنك متابعة الطلب من قائمة "طلباتي".',
+            Text(
+              _paymentMethod == 0 
+                ? 'شكراً لك! تم تأكيد دفعك وجاري تجهيز الطلب للتوصيل.' 
+                : 'سيتم دفع المبلغ نقداً عند استلام الطلب. يمكنك متابعة الحالة الآن.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.5, fontFamily: 'Cairo'),
+              style: const TextStyle(fontSize: 13, color: Colors.black54, height: 1.5, fontFamily: 'Cairo'),
             ),
             const SizedBox(height: 25),
             ElevatedButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                Navigator.of(context).popUntil((route) => route.isFirst); // Go to Home
+                Navigator.of(context).pop(); 
+                Navigator.of(context).popUntil((route) => route.isFirst);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 0,
-              ),
-              child: const Text('موافق', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B3022), minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+              child: const Text('العودة للرئيسية', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTextField(String label, String hint, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54, fontFamily: 'Cairo')),
-        const SizedBox(height: 8),
-        TextField(
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon, size: 20, color: const Color(0xFF1B3022)),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSelectionField(String label, String value, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54, fontFamily: 'Cairo')),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: const Color(0xFF1B3022)),
-              const SizedBox(width: 10),
-              Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -262,4 +366,3 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 }
-
