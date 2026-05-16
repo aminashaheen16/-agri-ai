@@ -8,7 +8,7 @@ import '../../store/cart_screen.dart';
 import '../../store/favorites_screen.dart';
 import '../../profile/about_app_screen.dart';
 import '../../profile/settings_screen.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:agri_ai/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../profile/address_management_screen.dart';
 import '../../store/order_tracking_screen.dart';
@@ -45,7 +45,7 @@ class ChatSidebar extends ConsumerWidget {
               ),
             ),
             accountName: Text(profile?.fullName ?? 'مستخدم Agri.AI', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-            accountEmail: Text(profile?.email ?? '', style: const TextStyle(fontSize: 12, opacity: 0.8)),
+            accountEmail: Text(profile?.email ?? '', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.8))),
             onDetailsPressed: () => _showEditProfileDialog(context, ref),
           ),
           

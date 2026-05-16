@@ -9,8 +9,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../ai_chat/chat_screen.dart';
 import '../ai_chat/widgets/product_card_widget.dart';
-import '../../core/providers/chat_provider.dart';
 import '../../core/services/groq_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../features/store/product_service.dart';
 import 'plant_results_screen.dart'; // Import the new results screen
 

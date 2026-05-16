@@ -95,7 +95,7 @@ class NotificationsScreen extends ConsumerWidget {
       case 'زراعية': return Icons.eco;
       case 'تنبيه': return Icons.warning_amber_rounded;
       case 'متجر': return Icons.shopping_bag_outlined;
-      case 'مساعد': return Icons.robot_2_outlined;
+      case 'مساعد': return Icons.smart_toy_outlined;
       case 'تقرير': return Icons.bar_chart;
       default: return Icons.notifications;
     }

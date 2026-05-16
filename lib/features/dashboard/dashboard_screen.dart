@@ -10,7 +10,7 @@ import 'soil_analysis_screen.dart';
 import '../../core/widgets/floating_quick_nav.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/hardware_listener.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:agri_ai/l10n/app_localizations.dart';
 import '../profile/notifications_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -598,10 +598,14 @@ class DashboardScreen extends ConsumerWidget {
                 children: [
                   Text(notification.title, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13)),
                   Text(notification.body, style: const TextStyle(fontSize: 11, color: Colors.black54, fontFamily: 'Cairo')),
-                ],
-              ),
-            ),
- class _AgendaContent extends ConsumerStatefulWidget {
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AgendaContent extends ConsumerStatefulWidget {
   const _AgendaContent({super.key});
 
   @override

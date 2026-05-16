@@ -6,7 +6,6 @@ import '../services/chat_storage_service.dart';
 import '../providers/settings_provider.dart';
 import '../../features/store/product_service.dart';
 
-final groqServiceProvider = Provider<GroqService>((ref) => GroqService());
 final chatStorageServiceProvider = Provider<ChatStorageService>((ref) => ChatStorageService());
 
 class ChatMessage {
@@ -45,7 +44,7 @@ class ChatMessage {
     'role': role,
     'content': content,
     'created_at': createdAt.toIso8601String(),
-    'show_scanner_suggestion': show_scanner_suggestion,
+    'show_scanner_suggestion': showScannerSuggestion,
   };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
@@ -195,6 +194,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   void createNewChat() async {
     final isEn = _ref.read(settingsProvider).language == 'en';
+    final id = _uuid.v4();
     final newSession = ChatSession(
       id: id,
       title: isEn ? 'New Chat' : 'محادثة جديدة',

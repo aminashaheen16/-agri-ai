@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/app_constants.dart';
+
+final groqServiceProvider = Provider<GroqService>((ref) => GroqService());
 
 class GroqService {
   final String _baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
