@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/chat_provider.dart';
+import '../ai_chat/chat_screen.dart';
 
-class HelpCenterScreen extends StatelessWidget {
+class HelpCenterScreen extends ConsumerWidget {
   const HelpCenterScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -55,7 +58,14 @@ class HelpCenterScreen extends StatelessWidget {
             
             const SizedBox(height: 40),
             ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () {
+                // Create a support chat and navigate to chat screen
+                ref.read(chatProvider.notifier).createSupportChat();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatScreen()),
+                );
+              },
               icon: const Icon(Icons.chat_outlined, color: Colors.white),
               label: const Text('تحدث مع الدعم الفني الآن', style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
               style: ElevatedButton.styleFrom(

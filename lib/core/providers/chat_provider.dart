@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide Provider;
 import 'package:uuid/uuid.dart';
 import '../services/groq_service.dart';
 import '../services/chat_storage_service.dart';
+import '../providers/settings_provider.dart';
 import '../../features/store/product_service.dart';
 
 final groqServiceProvider = Provider<GroqService>((ref) => GroqService());
@@ -44,7 +45,7 @@ class ChatMessage {
     'role': role,
     'content': content,
     'created_at': createdAt.toIso8601String(),
-    'show_scanner_suggestion': showScannerSuggestion,
+    'show_scanner_suggestion': show_scanner_suggestion,
   };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
@@ -75,7 +76,7 @@ class ChatSession {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'chat_id': id, // Alias for older compatibility if needed
+    'chat_id': id,
     'title': title,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
@@ -147,7 +148,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
   final _supabase = Supabase.instance.client;
   final _uuid = const Uuid();
 
-  ChatNotifier(this._groqService, this._storageService) 
+  final Ref _ref;
+
+  ChatNotifier(this._groqService, this._storageService, this._ref) 
       : super(ChatState(sessions: [])) {
     _init();
   }
@@ -158,6 +161,16 @@ class ChatNotifier extends StateNotifier<ChatState> {
       state = state.copyWith(sessions: localSessions, activeSessionId: localSessions.first.id);
     }
     await syncWithSupabase();
+    await _cleanupOldChats();
+  }
+
+  Future<void> _cleanupOldChats() async {
+    try {
+      // Delete old test chats with generic title
+      await _supabase.from('chats').delete().eq('title', 'محادثة جديدة');
+    } catch (e) {
+      print('Cleanup Error: $e');
+    }
   }
 
   Future<void> syncWithSupabase() async {
@@ -181,10 +194,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
   }
 
   void createNewChat() async {
-    final id = _uuid.v4();
+    final isEn = _ref.read(settingsProvider).language == 'en';
     final newSession = ChatSession(
       id: id,
-      title: 'محادثة جديدة',
+      title: isEn ? 'New Chat' : 'محادثة جديدة',
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       messages: [
@@ -192,18 +205,44 @@ class ChatNotifier extends StateNotifier<ChatState> {
           id: _uuid.v4(),
           chatId: id,
           role: 'assistant',
-          content: 'مرحباً! أنا المساعد الذكي، كيف يمكنني مساعدتك اليوم؟',
+          content: isEn ? 'Hello! I am your Smart Assistant, how can I help you today?' : 'مرحباً! أنا المساعد الذكي، كيف يمكنني مساعدتك اليوم؟',
           createdAt: DateTime.now(),
         ),
       ],
     );
     state = state.copyWith(sessions: [newSession, ...state.sessions], activeSessionId: newSession.id, streamingResponse: '');
     _saveLocal();
+    _persistChatToSupabase(newSession);
+  }
+
+  void createSupportChat() async {
+    final id = _uuid.v4();
+    final newSession = ChatSession(
+      id: id,
+      title: 'الدعم الفني',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      messages: [
+        ChatMessage(
+          id: _uuid.v4(),
+          chatId: id,
+          role: 'assistant',
+          content: 'مرحباً! أنا هنا لمساعدتك في أي مشكلة تواجهها في التطبيق.\nكيف يمكنني مساعدتك اليوم؟',
+          createdAt: DateTime.now(),
+        ),
+      ],
+    );
+    state = state.copyWith(sessions: [newSession, ...state.sessions], activeSessionId: newSession.id, streamingResponse: '');
+    _saveLocal();
+    _persistChatToSupabase(newSession);
+  }
+
+  Future<void> _persistChatToSupabase(ChatSession session) async {
     final user = _supabase.auth.currentUser;
     if (user != null) {
       try {
-        await _supabase.from('chats').insert({'id': newSession.id, 'title': newSession.title, 'user_id': user.id, 'created_at': newSession.createdAt.toIso8601String(), 'updated_at': newSession.updatedAt.toIso8601String()});
-        await _supabase.from('messages').insert(newSession.messages.first.toJson());
+        await _supabase.from('chats').insert({'id': session.id, 'title': session.title, 'user_id': user.id, 'created_at': session.createdAt.toIso8601String(), 'updated_at': session.updatedAt.toIso8601String()});
+        await _supabase.from('messages').insert(session.messages.first.toJson());
       } catch (e) {
         print('Supabase Save Error: $e');
       }
@@ -244,6 +283,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
       createdAt: DateTime.now(),
     );
 
+    // Update local state for messages
     final updatedMessages = [...currentSession.messages, userMessage];
     _updateActiveSession(messages: updatedMessages, updatedAt: DateTime.now());
     state = state.copyWith(isLoading: true, streamingResponse: '', pendingRecommendations: []);
@@ -251,45 +291,58 @@ class ChatNotifier extends StateNotifier<ChatState> {
     _saveMessageToSupabase(userMessage);
 
     try {
-      if (currentSession.messages.length == 1) {
-        final words = text.split(' ');
-        final title = words.length > 5 ? '${words.take(5).join(' ')}...' : text;
-        _updateActiveSession(title: title);
-        _updateChatTitleInSupabase(currentSession.id, title);
+      // 1. Generate and update Title on FIRST user message
+      if (updatedMessages.length == 2 && currentSession.title == 'محادثة جديدة') {
+        String newTitle = text.length > 30 ? '${text.substring(0, 30)}...' : text;
+        _updateActiveSession(title: newTitle);
+        await _supabase.from('chats').update({'title': newTitle}).eq('id', currentSession.id);
       }
 
       final historyMap = updatedMessages.map((m) => {'role': m.role, 'content': m.content}).toList();
       
-      String diagnosis = '';
-      await for (final chunk in _groqService.getChatResponseStream("قدم تشخيصاً مختصراً جداً (كلمات مفتاحية) للمشكلة التالية: $text", historyMap.sublist(0, historyMap.length - 1))) {
-        diagnosis += chunk;
+      // Determine System Prompt based on language
+      final isEn = _ref.read(settingsProvider).language == 'en';
+      String? customPrompt;
+      if (currentSession.title == 'الدعم الفني') {
+        customPrompt = isEn 
+          ? "You are a technical support assistant for the Agri.AI app. Help users with: login, store/cart issues, scanner problems. Answer briefly in English only."
+          : "أنت مساعد دعم فني لتطبيق Agri.AI الزراعي. ساعد المستخدم في حل أي مشكلة تقنية في التطبيق مثل: مشاكل تسجيل الدخول، مشاكل في المتجر أو السلة، مشاكل في فحص النباتات، أي استفسار عن التطبيق. أجب بالعربية فقط بشكل ودي ومختصر";
+      } else {
+        customPrompt = isEn
+          ? "You are a smart agricultural assistant. Answer all questions in English only. Focus on farming, plants, soil, irrigation, and crop diseases. Be concise and practical."
+          : "أنت مساعد زراعي ذكي متخصص حصراً في المجال الزراعي. يجب أن تكون جميع ردودك باللغة العربية الفصحى فقط. أجب فقط على الأسئلة المتعلقة بالزراعة والنباتات والتربة والري والأمراض الزراعية والمحاصيل. اجعل إجاباتك مختصرة وعملية ومفيدة.";
       }
-
-      final relevantProducts = await _searchRelevantProducts(diagnosis + " " + text);
-      state = state.copyWith(pendingRecommendations: relevantProducts);
-
-      // Visual Problem Detection
-      final visualKeywords = ['أوراق', 'ورق', 'ورقة', 'اصفرار', 'تحول اللون', 'بقع', 'مرض', 'عفن', 'تلف', 'حشرات', 'شكل غريب', 'تشوه', 'لون', 'مظهر'];
-      bool isVisualProblem = visualKeywords.any((kw) => text.contains(kw) || diagnosis.contains(kw));
-
-      String productContext = '';
-      if (relevantProducts.isNotEmpty) {
-        productContext = "\n\nالمنتجات المتاحة في متجرنا التي تناسب هذه المشكلة:\n" + 
-            relevantProducts.map((p) => "- ${p.name}: ${p.description} - السعر: ${p.price} جنيه").join('\n');
-      }
-
-      String systemHint = "\n\n[تعليق النظام: يرجى التوصية بالمنتجات التالية بشكل طبيعي في إجابتك: $productContext]";
-      if (isVisualProblem) {
-        systemHint += "\nأيضاً، اقترح على المستخدم استخدام ميزة 'فحص النبات' في التطبيق للحصول على تشخيص أدق بالصورة.";
-      }
-
-      final finalPrompt = text + systemHint;
 
       String fullResponse = '';
-      await for (final chunk in _groqService.getChatResponseStream(finalPrompt, historyMap.sublist(0, historyMap.length - 1))) {
+      await for (final chunk in _groqService.getChatResponseStream(text, historyMap.sublist(0, historyMap.length - 1), customSystemPrompt: customPrompt)) {
         fullResponse += chunk;
         state = state.copyWith(streamingResponse: fullResponse);
       }
+
+      final response = fullResponse;
+      bool shouldShowProducts = (currentSession.title != 'الدعم الفني') && (
+                                response.contains('نقص') || 
+                                response.contains('مرض') ||
+                                response.contains('علاج') ||
+                                response.contains('اصفرار') ||
+                                response.contains('حشرات') ||
+                                response.contains('فطر') ||
+                                response.contains('عفن') ||
+                                response.contains('ذبول') ||
+                                response.contains('تلف') ||
+                                response.contains('آفات'));
+
+      List<Product> relevantProducts = [];
+      if (shouldShowProducts) {
+        String diagnosis = '';
+        await for (final chunk in _groqService.getChatResponseStream("قدم تشخيصاً مختصراً جداً (كلمات مفتاحية فقط بالعربية) لهذه الحالة: $response", [])) {
+          diagnosis += chunk;
+        }
+        relevantProducts = await _searchRelevantProducts(diagnosis + " " + text);
+      }
+
+      final visualKeywords = ['أوراق', 'ورق', 'ورقة', 'اصفرار', 'تحول اللون', 'بقع', 'مرض', 'عفن', 'تلف', 'حشرات', 'شكل غريب', 'تشوه', 'لون', 'مظهر'];
+      bool isVisualProblem = visualKeywords.any((kw) => text.contains(kw) || response.contains(kw));
 
       final botMessage = ChatMessage(
         id: _uuid.v4(),
@@ -298,7 +351,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         content: fullResponse,
         createdAt: DateTime.now(),
         recommendedProducts: relevantProducts,
-        showScannerSuggestion: isVisualProblem,
+        showScannerSuggestion: isVisualProblem && shouldShowProducts,
       );
 
       _updateActiveSession(messages: [...updatedMessages, botMessage], updatedAt: DateTime.now());
@@ -325,7 +378,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
       }
       if (searchKey == null) searchKey = text.split(' ').first;
 
-      final response = await _supabase.from('products').select('*').or('description.ilike.%$searchKey%,name.ilike.%$searchKey%').limit(3);
+      final response = await _supabase.from('products_with_price').select('*').or('description.ilike.%$searchKey%,name.ilike.%$searchKey%').limit(3);
       return (response as List).map((p) => Product.fromJson(p)).toList();
     } catch (e) {
       print('Supabase Product Search Error: $e');
@@ -340,14 +393,6 @@ class ChatNotifier extends StateNotifier<ChatState> {
       await _supabase.from('messages').insert(message.toJson());
     } catch (e) {
       print('Supabase Message Save Error: $e');
-    }
-  }
-
-  Future<void> _updateChatTitleInSupabase(String chatId, String title) async {
-    try {
-      await _supabase.from('chats').update({'title': title}).eq('id', chatId);
-    } catch (e) {
-      print('Supabase Title Update Error: $e');
     }
   }
 
@@ -369,5 +414,5 @@ class ChatNotifier extends StateNotifier<ChatState> {
 final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
   final groqService = ref.watch(groqServiceProvider);
   final storageService = ref.watch(chatStorageServiceProvider);
-  return ChatNotifier(groqService, storageService);
+  return ChatNotifier(groqService, storageService, ref);
 });

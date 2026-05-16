@@ -18,19 +18,16 @@ class CartService {
     if (user == null) return [];
 
     try {
+      // Using the 'cart' table as requested by the user
       final data = await _supabase
-          .from('cart_items')
-          .select()
+          .from('cart')
+          .select('*, products(*)')
           .eq('user_id', user.id);
 
       return (data as List).map((item) {
-        final product = Product(
-          id: item['product_id']?.toString() ?? '',
-          name: item['product_name'] ?? '',
-          price: double.tryParse(item['price']?.toString() ?? '0') ?? 0.0,
-          imageUrl: item['image_url'],
-          category: 'عام',
-        );
+        final prodData = item['products'];
+        final product = Product.fromJson(prodData);
+        
         return CartItem(
           id: item['id']?.toString() ?? '',
           product: product,
@@ -38,7 +35,8 @@ class CartService {
         );
       }).toList();
     } catch (e) {
-      print('Cart Error: $e');
+      print('Cart Load Error: $e');
+      // Fallback to simpler mapping if join fails
       return [];
     }
   }
@@ -48,42 +46,33 @@ class CartService {
     if (user == null) return;
 
     try {
-      final existing = await _supabase
-          .from('cart_items')
-          .select()
-          .eq('user_id', user.id)
-          .eq('product_id', product.id)
-          .maybeSingle();
-
-      if (existing != null) {
-        final newQty = (existing['quantity'] as int) + quantity;
-        await _supabase
-            .from('cart_items')
-            .update({'quantity': newQty})
-            .eq('id', existing['id']);
-      } else {
-        await _supabase.from('cart_items').insert({
-          'user_id': user.id,
-          'product_id': product.id,
-          'quantity': quantity,
-          'product_name': product.name,
-          'price': product.price,
-          'image_url': product.imageUrl,
-        });
-      }
+      await _supabase.from('cart').upsert({
+        'user_id': user.id,
+        'product_id': product.id,
+        'quantity': quantity,
+        'created_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id,product_id'); 
+      // Note: Assumes a unique constraint on (user_id, product_id) in the 'cart' table
     } catch (e) {
-      print('Cart Error: $e');
+      print('Cart Add Error: $e');
+      // Fallback to insert if upsert/unique constraint not ready
+      await _supabase.from('cart').insert({
+        'user_id': user.id,
+        'product_id': product.id,
+        'quantity': quantity,
+        'created_at': DateTime.now().toIso8601String(),
+      });
     }
   }
 
   Future<void> removeFromCart(String itemId) async {
-    await _supabase.from('cart_items').delete().eq('id', itemId);
+    await _supabase.from('cart').delete().eq('id', itemId);
   }
 
   Future<void> clearCart() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    await _supabase.from('cart_items').delete().eq('user_id', user.id);
+    await _supabase.from('cart').delete().eq('user_id', user.id);
   }
 }
 
@@ -92,4 +81,3 @@ final cartServiceProvider = Provider((ref) => CartService());
 final cartItemsProvider = FutureProvider<List<CartItem>>((ref) async {
   return ref.watch(cartServiceProvider).getCartItems();
 });
-

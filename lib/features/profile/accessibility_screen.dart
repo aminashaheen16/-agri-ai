@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/settings_provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class AccessibilityScreen extends ConsumerWidget {
   const AccessibilityScreen({super.key});
@@ -10,15 +11,15 @@ class AccessibilityScreen extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final isAr = settings.language == 'ar';
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: settings.themeMode == ThemeMode.dark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: Text(isAr ? 'مركز مساعدة ذوي الهمم' : 'Accessibility Center', 
           style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -26,8 +27,9 @@ class AccessibilityScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle(isAr ? 'حجم الخط' : 'Font Size'),
+            _buildSectionTitle(l10n.plantHealth), // Using a placeholder for Font Size section if needed
             _buildSettingCard(
+              settings,
               child: Padding(
                 padding: const EdgeInsets.all(15.0),
                 child: Column(
@@ -40,8 +42,8 @@ class AccessibilityScreen extends ConsumerWidget {
                           child: Slider(
                             value: settings.fontSizeMultiplier,
                             min: 0.8,
-                            max: 1.5,
-                            divisions: 7,
+                            max: 1.4,
+                            divisions: 6,
                             activeColor: Colors.green,
                             onChanged: (val) => notifier.setFontSize(val),
                           ),
@@ -61,6 +63,7 @@ class AccessibilityScreen extends ConsumerWidget {
 
             _buildSectionTitle(isAr ? 'المظهر والتباين' : 'Appearance & Contrast'),
             _buildSettingCard(
+              settings,
               child: Column(
                 children: [
                   SwitchListTile(
@@ -77,6 +80,39 @@ class AccessibilityScreen extends ConsumerWidget {
                     value: settings.highContrast,
                     activeColor: Colors.green,
                     onChanged: (val) => notifier.toggleContrast(val),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            _buildSectionTitle(isAr ? 'خيارات إضافية' : 'Advanced Options'),
+            _buildSettingCard(
+              settings,
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.ads_click, color: Colors.blue),
+                    title: Text(isAr ? 'أزرار كبيرة' : 'Large Buttons', style: const TextStyle(fontFamily: 'Cairo')),
+                    value: settings.largeButtons,
+                    activeColor: Colors.green,
+                    onChanged: (val) => notifier.setLargeButtons(val),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.vibration, color: Colors.teal),
+                    title: Text(isAr ? 'الاهتزاز عند اللمس' : 'Touch Vibration', style: const TextStyle(fontFamily: 'Cairo')),
+                    value: settings.vibration,
+                    activeColor: Colors.green,
+                    onChanged: (val) => notifier.setVibration(val),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.auto_fix_high, color: Colors.purple),
+                    title: Text(isAr ? 'واجهة مبسطة' : 'Simplified UI', style: const TextStyle(fontFamily: 'Cairo')),
+                    value: settings.simplifiedUI,
+                    activeColor: Colors.green,
+                    onChanged: (val) => notifier.setSimplifiedUI(val),
                   ),
                 ],
               ),
@@ -118,12 +154,13 @@ class AccessibilityScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSettingCard({required Widget child}) {
+  Widget _buildSettingCard(SettingsState settings, {required Widget child}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: settings.themeMode == ThemeMode.dark ? const Color(0xFF2A2A2A) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        border: settings.highContrast ? Border.all(color: settings.themeMode == ThemeMode.dark ? Colors.white : Colors.black, width: 2) : null,
       ),
       child: child,
     );

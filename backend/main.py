@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 from PIL import Image
 import io
-import tflite_runtime.interpreter as tflite
+import tensorflow.lite as tflite
 from groq import Groq
 from dotenv import load_dotenv
 

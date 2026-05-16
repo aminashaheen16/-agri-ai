@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide Provider;
 import '../../core/services/cart_service.dart';
 import 'product_service.dart';
 import '../../core/providers/favorites_provider.dart';
+import 'cart_screen.dart';
 
 class ProductDetailsScreen extends ConsumerStatefulWidget {
   final String id;
@@ -19,7 +21,7 @@ class ProductDetailsScreen extends ConsumerStatefulWidget {
     required this.price,
     required this.image,
     this.description,
-    this.rating = 4.5,
+    this.rating = 0.0, // Default to 0.0 as requested
   });
 
   @override
@@ -30,6 +32,82 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
   int quantity = 1;
   bool _isAdding = false;
   int _userRating = 0;
+  double _averageRating = 0.0;
+  int _ratingCount = 0;
+  final _supabase = Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _averageRating = widget.rating;
+    _loadProductRatings();
+  }
+
+  Future<void> _loadProductRatings() async {
+    try {
+      final response = await _supabase
+          .from('product_ratings')
+          .select('rating')
+          .eq('product_id', widget.id);
+      
+      if (response != null && (response as List).isNotEmpty) {
+        final ratings = response as List;
+        final sum = ratings.fold<double>(0, (prev, element) => prev + (element['rating'] as num).toDouble());
+        setState(() {
+          _averageRating = sum / ratings.length;
+          _ratingCount = ratings.length;
+        });
+      }
+
+      // Load current user's rating if any
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final userRatingRes = await _supabase
+            .from('product_ratings')
+            .select('rating')
+            .eq('product_id', widget.id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+        
+        if (userRatingRes != null) {
+          setState(() {
+            _userRating = userRatingRes['rating'];
+          });
+        }
+      }
+    } catch (e) {
+      print('Load Ratings Error: $e');
+    }
+  }
+
+  Future<void> _submitRating(int rating) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تسجيل الدخول للتقييم', style: TextStyle(fontFamily: 'Cairo'))),
+      );
+      return;
+    }
+
+    try {
+      await _supabase.from('product_ratings').upsert({
+        'user_id': user.id,
+        'product_id': widget.id,
+        'rating': rating,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      
+      if (mounted) {
+        setState(() => _userRating = rating);
+        _loadProductRatings(); // Refresh average
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('شكراً لتقييمك بـ $rating نجوم! ⭐', style: const TextStyle(fontFamily: 'Cairo')))
+        );
+      }
+    } catch (e) {
+      print('Submit Rating Error: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,18 +123,13 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
         actions: [
           Consumer(
             builder: (context, ref, child) {
-              final isFav = ref.watch(favoritesProvider).contains(widget.id);
+              final favorites = ref.watch(favoritesProvider);
+              final isFav = favorites.contains(widget.id);
               return IconButton(
                 icon: Icon(isFav ? Icons.favorite : Icons.favorite_border, 
                   color: isFav ? Colors.red : Colors.black),
                 onPressed: () {
                   ref.read(favoritesProvider.notifier).toggleFavorite(widget.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(isFav ? 'تمت الإزالة من المفضلة' : 'تمت الإضافة للمفضلة ❤️', style: const TextStyle(fontFamily: 'Cairo')),
-                      duration: const Duration(seconds: 1),
-                    ),
-                  );
                 },
               );
             },
@@ -109,7 +182,9 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
                           children: [
                             const Icon(Icons.star, color: Colors.orange, size: 16),
                             const SizedBox(width: 5),
-                            Text('${widget.rating}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(_averageRating.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)),
+                            if (_ratingCount > 0)
+                              Text(' ($_ratingCount)', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                           ],
                         ),
                       ),
@@ -147,12 +222,7 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
                     children: List.generate(5, (index) {
                       final starIndex = index + 1;
                       return IconButton(
-                        onPressed: () {
-                          setState(() => _userRating = starIndex);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('شكراً لتقييمك بـ $starIndex نجوم! ⭐', style: const TextStyle(fontFamily: 'Cairo')))
-                          );
-                        },
+                        onPressed: () => _submitRating(starIndex),
                         icon: Icon(
                           _userRating >= starIndex ? Icons.star : Icons.star_border, 
                           color: Colors.orange, 
@@ -224,16 +294,20 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
       final product = Product(
         id: widget.id,
         name: widget.name,
-        price: double.parse(widget.price),
+        price: double.tryParse(widget.price.replaceAll(',', '')) ?? 0.0,
         imageUrl: widget.image,
         category: 'عام',
       );
-      await ref.read(cartServiceProvider).addToCart(product);
+      await ref.read(cartServiceProvider).addToCart(product, quantity: quantity);
+      ref.invalidate(cartItemsProvider);
+      
       if (mounted) {
         setState(() => _isAdding = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تمت إضافة المنتج للسلة بنجاح ✅', style: TextStyle(fontFamily: 'Cairo'))),
         );
+        // Navigate to cart screen as requested
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
       }
     } catch (e) {
       if (mounted) {

@@ -40,9 +40,10 @@ class FavoritesNotifier extends StateNotifier<List<String>> {
     } else {
       // إضافة للمفضلة
       state = [...state, productId];
-      await _supabase.from('favorites').insert({
+      await _supabase.from('favorites').upsert({
         'user_id': user.id,
         'product_id': productId,
+        'created_at': DateTime.now().toIso8601String()
       });
     }
   }

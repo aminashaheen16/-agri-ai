@@ -5,13 +5,13 @@ import '../constants/app_constants.dart';
 class GroqService {
   final String _baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
 
-  Stream<String> getChatResponseStream(String prompt, List<Map<String, String>> history) async* {
+  Stream<String> getChatResponseStream(String prompt, List<Map<String, String>> history, {String? customSystemPrompt}) async* {
     print('GroqService: Starting chat response stream...');
     try {
       final List<Map<String, String>> messages = [
         {
           'role': 'system',
-          'content': 'أنت مساعد زراعي ذكي متخصص حصراً في المجال الزراعي. أجب فقط على الأسئلة المتعلقة بالزراعة والنباتات والتربة والري والأمراض الزراعية والمحاصيل. إذا سألك المستخدم عن أي موضوع آخر، اعتذر بلطف وأخبره أنك متخصص في الزراعة فقط. اجعل إجاباتك مختصرة وعملية ومفيدة.'
+          'content': customSystemPrompt ?? 'أنت مساعد زراعي ذكي متخصص حصراً في المجال الزراعي. يجب أن تكون جميع ردودك باللغة العربية الفصحى فقط بدون أي كلمات إنجليزية أو لغات أخرى. إذا أرسل المستخدم رسالة بالإنجليزية، رد عليه بالعربية فقط. أجب فقط على الأسئلة المتعلقة بالزراعة والنباتات والتربة والري والأمراض الزراعية والمحاصيل. إذا سألك المستخدم عن أي موضوع آخر، اعتذر بلطف وأخبره أنك متخصص في الزراعة فقط. اجعل إجاباتك مختصرة وعملية ومفيدة.'
         },
         ...history,
         {'role': 'user', 'content': prompt}
@@ -73,6 +73,10 @@ class GroqService {
         body: jsonEncode({
           'model': AppConstants.groqModel,
           'messages': [
+            {
+              'role': 'system',
+              'content': 'أنت مساعد زراعي ذكي. أجب باللغة العربية الفصحى فقط بدون أي كلمات إنجليزية.'
+            },
             {'role': 'user', 'content': prompt}
           ],
           'max_tokens': 500,
@@ -88,6 +92,65 @@ class GroqService {
     } catch (e) {
       return 'عذراً، حدث خطأ في الحصول على التحليل.';
     }
+  }
+
+  Future<Map<String, dynamic>> getPlantAnalysis(String modelResult) async {
+    final prompt = """
+    نتيجة تحليل النبتة: $modelResult
+    قدم تحليلاً شاملاً يتضمن:
+    1. التشخيص والتحليل
+    2. احتياجات الري
+    3. البيئة والإضاءة المناسبة
+    4. نصائح الاهتمام (نقاط)
+    5. توصية السماد (النوع والنسبة والسبب)
+    6. توصية حجم القصيص
+    7. خطة العلاج
+    أجب بـ JSON فقط بهذا الشكل:
+    {
+      "status": "warning" أو "healthy",
+      "plantName": "",
+      "diagnosis": "",
+      "watering": "",
+      "environment": "",
+      "tips": ["", "", ""],
+      "fertilizer": {"type": "", "ratio": "", "reason": ""},
+      "potSize": "",
+      "treatment": ""
+    }
+    لا تضف أي نص خارج JSON.
+    """;
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Authorization': 'Bearer ${AppConstants.groqApiKey}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': AppConstants.groqModel,
+          'messages': [
+            {
+              'role': 'system',
+              'content': 'أنت مساعد زراعي خبير. أجب بـ JSON فقط باللغة العربية.'
+            },
+            {'role': 'user', 'content': prompt}
+          ],
+          'max_tokens': 1000,
+          'temperature': 0.3,
+          'response_format': {'type': 'json_object'}
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['choices'][0]['message']['content'];
+        return jsonDecode(content);
+      }
+    } catch (e) {
+      print('Groq Analysis Error: $e');
+    }
+    return {};
   }
 
   Future<String> generateTitle(String firstMessage) async {

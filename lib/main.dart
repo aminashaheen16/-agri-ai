@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
@@ -20,6 +21,7 @@ void main() async {
   
   // Load Environment Variables
   await dotenv.load(fileName: ".env");
+  
   // Initialize Supabase
   try {
     await Supabase.initialize(
@@ -63,23 +65,30 @@ class AgriAIApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       
       // Theme Configuration
-      theme: AppTheme.lightTheme.copyWith(
-        textTheme: _buildResponsiveTextTheme(AppTheme.lightTheme.textTheme, settings.fontSizeMultiplier),
+      theme: AppTheme.lightTheme(highContrast: settings.highContrast).copyWith(
+        textTheme: _buildResponsiveTextTheme(
+          AppTheme.lightTheme(highContrast: settings.highContrast).textTheme, 
+          settings.fontSizeMultiplier
+        ),
       ),
-      darkTheme: AppTheme.darkTheme.copyWith(
-        textTheme: _buildResponsiveTextTheme(AppTheme.darkTheme.textTheme, settings.fontSizeMultiplier),
+      darkTheme: AppTheme.darkTheme(highContrast: settings.highContrast).copyWith(
+        textTheme: _buildResponsiveTextTheme(
+          AppTheme.darkTheme(highContrast: settings.highContrast).textTheme, 
+          settings.fontSizeMultiplier
+        ),
       ),
       themeMode: settings.themeMode,
       
       // Localization
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('ar', 'SA'),
-        Locale('en', 'US'),
+        Locale('ar'),
+        Locale('en'),
       ],
       locale: Locale(settings.language),
       
@@ -97,6 +106,7 @@ class AgriAIApp extends ConsumerWidget {
       titleLarge: base.titleLarge?.copyWith(fontSize: (base.titleLarge?.fontSize ?? 18) * multiplier),
       bodyLarge: base.bodyLarge?.copyWith(fontSize: (base.bodyLarge?.fontSize ?? 16) * multiplier),
       bodyMedium: base.bodyMedium?.copyWith(fontSize: (base.bodyMedium?.fontSize ?? 14) * multiplier),
+      labelLarge: base.labelLarge?.copyWith(fontSize: (base.labelLarge?.fontSize ?? 14) * multiplier),
     );
   }
 }

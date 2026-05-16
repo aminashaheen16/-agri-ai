@@ -5,15 +5,16 @@ import '../services/notification_service.dart';
 final hardwareListenerProvider = Provider<void>((ref) {
   ref.listen<AsyncValue<SensorData>>(sensorDataProvider, (previous, next) {
     next.whenData((data) {
+      final service = ref.read(notificationServiceProvider);
+
       // Check for low moisture
       if (data.moisture < 30.0) {
-        // Prevent spamming: only notify if it was previously OK or if it's the first reading
         final prevMoisture = previous?.value?.moisture ?? 100.0;
         if (prevMoisture >= 30.0) {
-          ref.read(notificationServiceProvider).sendNotification(
+          service.addNotification(
             title: 'تنبيه: رطوبة منخفضة! ⚠️',
             body: 'رطوبة التربة وصلت إلى ${data.moisture.toStringAsFixed(1)}%. يرجى التحقق من حالة الري.',
-            type: 'sensor',
+            type: 'تنبيه',
           );
         }
       }
@@ -22,10 +23,22 @@ final hardwareListenerProvider = Provider<void>((ref) {
       if (data.isPumpOn) {
         final prevPump = previous?.value?.isPumpOn ?? false;
         if (!prevPump) {
-          ref.read(notificationServiceProvider).sendNotification(
+          service.addNotification(
             title: 'تنبيه: تم بدء الري 💧',
             body: 'تم تفعيل مضخة الري تلقائياً لتعويض نقص الرطوبة.',
-            type: 'sensor',
+            type: 'زراعية',
+          );
+        }
+      }
+
+      // Check for low potassium (25% warning mentioned in request)
+      if (data.potassium < 25.0) {
+        final prevK = previous?.value?.potassium ?? 100.0;
+        if (prevK >= 25.0) {
+          service.addNotification(
+            title: 'تنبيه: نقص بوتاسيوم! 📊',
+            body: 'مستوى البوتاسيوم منخفض جداً (${data.potassium.toStringAsFixed(1)}%). نوصي بإضافة سماد مناسب.',
+            type: 'تنبيه',
           );
         }
       }

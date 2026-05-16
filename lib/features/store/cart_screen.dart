@@ -131,7 +131,10 @@ class CartScreen extends ConsumerWidget {
               const SizedBox(width: 15),
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 22),
-                onPressed: () => ref.read(cartServiceProvider).removeFromCart(item.id),
+                onPressed: () async {
+                  await ref.read(cartServiceProvider).removeFromCart(item.id);
+                  ref.invalidate(cartItemsProvider);
+                },
               ),
             ],
           ),

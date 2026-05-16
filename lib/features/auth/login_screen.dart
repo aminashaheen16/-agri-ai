@@ -1,31 +1,88 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'register_screen.dart';
 import '../dashboard/main_navigation_wrapper.dart';
+import '../../core/providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
 
-  void _login() {
+  Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainNavigationWrapper()),
+      await ref.read(authProvider.notifier).login(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
       );
+
+      final authState = ref.read(authProvider);
+      if (authState.error != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(authState.error!, style: const TextStyle(fontFamily: 'Cairo')),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else if (authState.user != null) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MainNavigationWrapper()),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handleForgotPassword() async {
+    if (_emailController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى إدخال البريد الإلكتروني أولاً', style: TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    await ref.read(authProvider.notifier).resetPassword(_emailController.text.trim());
+    
+    final authState = ref.read(authProvider);
+    if (authState.error != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authState.error!, style: const TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني', style: TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authState = ref.watch(authProvider);
     
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0A0F0A) : Colors.white,
@@ -69,6 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextFormField(
                   controller: _emailController,
                   style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontFamily: 'Cairo'),
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     labelText: 'البريد الإلكتروني',
                     labelStyle: const TextStyle(fontFamily: 'Cairo'),
@@ -82,6 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'يرجى إدخال البريد الإلكتروني';
+                    if (!value.contains('@')) return 'بريد إلكتروني غير صالح';
                     return null;
                   },
                 ),
@@ -112,6 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'يرجى إدخال كلمة المرور';
+                    if (value.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
                     return null;
                   },
                 ),
@@ -120,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () {},
+                    onPressed: authState.isLoading ? null : _handleForgotPassword,
                     child: const Text(
                       'نسيت كلمة المرور؟',
                       style: TextStyle(color: Color(0xFF2E7D32), fontFamily: 'Cairo', fontWeight: FontWeight.bold),
@@ -130,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 
                 const SizedBox(height: 40),
                 ElevatedButton(
-                  onPressed: _login,
+                  onPressed: authState.isLoading ? null : _handleLogin,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     backgroundColor: const Color(0xFF2E7D32),
@@ -140,10 +200,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(15),
                     ),
                   ),
-                  child: const Text(
-                    'دخول الآمن',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
-                  ),
+                  child: authState.isLoading 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text(
+                        'تسجيل الدخول',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+                      ),
                 ),
                 
                 const SizedBox(height: 40),

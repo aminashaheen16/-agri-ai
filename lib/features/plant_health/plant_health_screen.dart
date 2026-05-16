@@ -12,6 +12,7 @@ import '../ai_chat/widgets/product_card_widget.dart';
 import '../../core/providers/chat_provider.dart';
 import '../../core/services/groq_service.dart';
 import '../../features/store/product_service.dart';
+import 'plant_results_screen.dart'; // Import the new results screen
 
 class PlantHealthScreen extends ConsumerStatefulWidget {
   const PlantHealthScreen({super.key});
@@ -53,13 +54,12 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
       try {
         await _processPlantScan(pickedFile, bytes);
       } catch (e) {
-        print('Scan Processing Error: $e');
-        _showMockResult();
+        print('Detailed Scan Processing Error: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تعذر الاتصال بنموذج التحليل، تم عرض نتيجة تجريبية', style: TextStyle(fontFamily: 'Cairo')),
-              backgroundColor: Colors.orange,
+            SnackBar(
+              content: Text('خطأ في الاتصال بنموذج التحليل: $e', style: const TextStyle(fontFamily: 'Cairo')),
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -75,10 +75,10 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
     final diseaseName = modelResult['disease'] ?? 'Unknown';
     final isHealthy = diseaseName.toLowerCase().contains('healthy');
     
-    // 3. Get AI Explanation from Groq
+    // 3. Get AI Explanation from Groq (Existing logic)
     final aiExplanation = await _getAIAnalysis(diseaseName, isHealthy);
     
-    // 4. Search Products in Supabase
+    // 4. Search Products in Supabase (Existing logic)
     final products = await _searchRelevantProducts(diseaseName);
 
     // 5. Save to Supabase Storage & Database (Background)
@@ -92,29 +92,47 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
         _isHealthy = isHealthy;
         _recommendedProducts = products;
         _isAnalyzing = false;
-        _showResult = true;
+        // Navigation to NEW Results Screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlantResultsScreen(
+              modelResult: diseaseName,
+              imageBytes: bytes,
+            ),
+          ),
+        );
       });
     }
   }
 
   Future<Map<String, dynamic>> _analyzeImageWithModel(XFile imageFile, Uint8List bytes) async {
+    final url = Uri.parse('$_baseUrl/predict');
+    print('🚀 Sending request to Model API: $url');
+    
     try {
-      final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/predict'));
+      final request = http.MultipartRequest('POST', url);
       if (kIsWeb) {
         request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'plant.jpg'));
       } else {
         request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
       }
 
-      final response = await request.send().timeout(const Duration(seconds: 15));
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 20));
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      print('📊 Model API Status: ${response.statusCode}');
+      print('📦 Model API Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
-        final body = await response.stream.bytesToString();
-        return jsonDecode(body);
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Server returned ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
-      print('Model API Error: $e');
+      print('❌ Model API Error: $e');
+      rethrow;
     }
-    throw Exception('Model connection failed');
   }
 
   Future<String> _getAIAnalysis(String diseaseName, bool isHealthy) async {
@@ -186,14 +204,7 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
   }
 
   void _showMockResult() {
-    setState(() {
-      _detectedDisease = 'تبقع الأوراق البكتيري (Tomato Bacterial Spot)';
-      _confidence = 0.89;
-      _isHealthy = false;
-      _aiAnalysis = 'تظهر على النبتة بقع دائرية صغيرة داكنة، وهي حالة ناتجة عن رطوبة عالية في الأوراق. ننصح بإزالة الأوراق المصابة واستخدام مبيد فطري مناسب مع تقليل الري العلوي.';
-      _isAnalyzing = false;
-      _showResult = true;
-    });
+    // Logic removed as per user request to show real errors instead of fake results
   }
 
   @override
@@ -213,7 +224,7 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                if (!_showResult) _buildScanUI() else _buildResultUI(),
+                _buildScanUI(), // Only show scanner UI
               ],
             ),
           ),
@@ -278,107 +289,9 @@ class _PlantHealthScreenState extends ConsumerState<PlantHealthScreen> {
     );
   }
 
+  // Result UI is now handled by the new screen, but we keep the method for safety/compatibility
   Widget _buildResultUI() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 1. Plant Image
-        Container(
-          height: 220,
-          width: double.infinity,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(25), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(25),
-            child: _imageBytes != null ? Image.memory(_imageBytes!, fit: BoxFit.cover) : const SizedBox.shrink(),
-          ),
-        ),
-        const SizedBox(height: 20),
-        
-        // 2. Health Badge
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: _isHealthy ? Colors.green.shade50 : Colors.red.shade50,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _isHealthy ? Colors.green.shade200 : Colors.red.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(_isHealthy ? Icons.check_circle : Icons.error, color: _isHealthy ? Colors.green : Colors.red, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    _isHealthy ? 'نبتة صحية' : 'تحتاج عناية',
-                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: _isHealthy ? Colors.green : Colors.red),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _detectedDisease ?? '',
-                style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-
-        // 3. AI Analysis
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)]),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_isHealthy ? 'نصائح الحفاظ على نبتتك ✨' : 'التحليل والعلاج المقترح 🌿', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo', color: Color(0xFF1F361A))),
-              const Divider(height: 25),
-              Text(_aiAnalysis ?? '', style: const TextStyle(height: 1.6, fontFamily: 'Cairo', fontSize: 14, color: Colors.black87)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 25),
-
-        // 4. Product Recommendations
-        if (_recommendedProducts.isNotEmpty) ...[
-          Text(_isHealthy ? 'منتجات تساعد على صحة نبتتك ✨' : 'منتجات تساعد في العلاج 🌿', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo', color: Color(0xFF1F361A))),
-          const SizedBox(height: 15),
-          SizedBox(
-            height: 220,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _recommendedProducts.length,
-              itemBuilder: (context, index) => ProductRecommendationCard(product: _recommendedProducts[index]),
-            ),
-          ),
-          const SizedBox(height: 25),
-        ],
-        
-        // 5. Actions
-        ElevatedButton.icon(
-          onPressed: () {
-            final status = _isHealthy ? "سليمة وصحية" : "تحتاج عناية (إصابة بـ $_detectedDisease)";
-            final msg = "قمت بفحص نبتتي وكانت النتيجة: $status. هل يمكنك مساعدتي أكثر بناءً على هذا التحليل؟";
-            ref.read(chatProvider.notifier).sendMessage(msg);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatScreen()));
-          },
-          icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-          label: const Text('تحدث مع المساعد الذكي عن النتيجة 💬', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 14)),
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1F361A), minimumSize: const Size(double.infinity, 55), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton(
-          onPressed: () => setState(() => _showResult = false),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), side: const BorderSide(color: Color(0xFF1F361A))),
-          child: const Text('فحص نبات آخر', style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF1F361A))),
-        ),
-        const SizedBox(height: 50),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildResultRow(String label, String value, Color valueColor) {

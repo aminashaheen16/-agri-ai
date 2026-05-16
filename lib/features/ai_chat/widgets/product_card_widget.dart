@@ -9,53 +9,38 @@ class ProductRecommendationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 160,
-      margin: const EdgeInsets.only(right: 15),
-      decoration: BoxDecoration(
+      child: Card(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1F361A).withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Product Image
-          Expanded(
-            flex: 5,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF9FBFA),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network(
-                  product.imageUrl ?? 'https://via.placeholder.com/150',
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        margin: const EdgeInsets.only(right: 15, bottom: 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Product Image
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              child: Image.network(
+                product.imageUrl ?? 'https://via.placeholder.com/150',
+                width: double.infinity,
+                height: 100, // Minimal height to avoid collapse but still respect minAxisSize
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 100,
                   width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.shopping_bag_outlined,
-                    color: Colors.grey,
-                    size: 40,
-                  ),
+                  color: Colors.grey[100],
+                  child: const Icon(Icons.shopping_bag_outlined, color: Colors.grey),
                 ),
               ),
             ),
-          ),
-          // Product Details
-          Expanded(
-            flex: 6,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
+            // Product Details
+            Padding(
+              padding: const EdgeInsets.all(8.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -63,10 +48,9 @@ class ProductRecommendationCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'Cairo',
-                      color: Color(0xFF1F361A),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -78,22 +62,18 @@ class ProductRecommendationCard extends StatelessWidget {
                       fontSize: 10,
                       color: Colors.grey,
                       fontFamily: 'Cairo',
-                      height: 1.2,
                     ),
                   ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${product.price} EGP',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2E7D32),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    '${product.price} EGP',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2E7D32),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -123,19 +103,15 @@ class ProductRecommendationCard extends StatelessWidget {
                       ),
                       child: const Text(
                         'اعرف أكثر',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white,
-                          fontFamily: 'Cairo',
-                        ),
+                        style: TextStyle(fontSize: 10, color: Colors.white, fontFamily: 'Cairo'),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -7,18 +7,21 @@ class AppTheme {
   static Color darkGreen = const Color(0xFF1B5E20);
   static Color lightGreen = const Color(0xFF4CAF50);
   static Color accentGreen = const Color(0xFF66BB6A);
-  static Color backgroundColor = const Color(0xFFF8F9FA);
-  static Color surfaceColor = Colors.white;
-  static Color cardColor = Colors.white;
 
   // Light Theme
-  static ThemeData get lightTheme {
+  static ThemeData lightTheme({bool highContrast = false}) {
+    final base = ThemeData.light();
+    final textTheme = GoogleFonts.cairoTextTheme(base.textTheme);
+    
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       primarySwatch: Colors.green,
-      textTheme: GoogleFonts.cairoTextTheme(ThemeData.light().textTheme),
+      textTheme: highContrast 
+        ? _makeHighContrastText(textTheme, Colors.black)
+        : textTheme,
       primaryColor: primaryGreen,
+      scaffoldBackgroundColor: highContrast ? Colors.white : const Color(0xFFF8F9FA),
       
       colorScheme: ColorScheme.light(
         primary: primaryGreen,
@@ -32,18 +35,19 @@ class AppTheme {
       ),
       
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: highContrast ? Colors.white : Colors.transparent,
         foregroundColor: Colors.black,
-        elevation: 0,
+        elevation: highContrast ? 2 : 0,
         centerTitle: true,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
       
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryGreen,
+          backgroundColor: highContrast ? Colors.black : primaryGreen,
           foregroundColor: Colors.white,
-          elevation: 2,
+          elevation: highContrast ? 0 : 2,
+          side: highContrast ? const BorderSide(color: Colors.black, width: 3) : null,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -53,20 +57,21 @@ class AppTheme {
       
       cardTheme: CardThemeData(
         color: Colors.white,
-        elevation: 2,
+        elevation: highContrast ? 0 : 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
+          side: highContrast ? const BorderSide(color: Colors.black, width: 3) : BorderSide.none,
         ),
       ),
       
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.black12),
+          borderSide: BorderSide(color: highContrast ? Colors.black : Colors.black12, width: highContrast ? 3 : 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primaryGreen, width: 2),
+          borderSide: BorderSide(color: highContrast ? Colors.black : primaryGreen, width: 3),
         ),
         filled: true,
         fillColor: Colors.white,
@@ -74,39 +79,46 @@ class AppTheme {
     );
   }
 
-  // Dark Theme (Agricultural Green Theme)
-  static ThemeData get darkTheme {
+  // Real Dark Theme
+  static ThemeData darkTheme({bool highContrast = false}) {
+    final base = ThemeData.dark();
+    final textTheme = GoogleFonts.cairoTextTheme(base.textTheme);
+    
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light, // We use light brightness with green accents for the premium look
+      brightness: Brightness.dark,
       primarySwatch: Colors.green,
-      textTheme: GoogleFonts.cairoTextTheme(ThemeData.light().textTheme),
+      textTheme: highContrast 
+        ? _makeHighContrastText(textTheme, Colors.white)
+        : textTheme,
       primaryColor: darkGreen,
+      scaffoldBackgroundColor: highContrast ? Colors.black : const Color(0xFF1A1A1A),
       
-      colorScheme: ColorScheme.light(
-        primary: darkGreen,
+      colorScheme: ColorScheme.dark(
+        primary: primaryGreen,
         secondary: accentGreen,
-        surface: Colors.white,
+        surface: highContrast ? Colors.black : const Color(0xFF2A2A2A),
         error: Colors.redAccent,
         onPrimary: Colors.white,
-        onSecondary: Colors.black,
-        onSurface: Colors.black,
+        onSecondary: Colors.white,
+        onSurface: Colors.white,
         onError: Colors.white,
       ),
       
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
-        elevation: 0,
+        backgroundColor: highContrast ? Colors.black : const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+        elevation: highContrast ? 2 : 0,
         centerTitle: true,
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
       
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: darkGreen,
-          foregroundColor: Colors.white,
+          backgroundColor: highContrast ? Colors.white : primaryGreen,
+          foregroundColor: highContrast ? Colors.black : Colors.white,
           elevation: 2,
+          side: highContrast ? const BorderSide(color: Colors.white, width: 3) : null,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -115,33 +127,39 @@ class AppTheme {
       ),
       
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: highContrast ? Colors.black : const Color(0xFF2A2A2A),
         elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
+          side: highContrast ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
         ),
       ),
       
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.black12),
+          borderSide: BorderSide(color: highContrast ? Colors.white : Colors.white24, width: highContrast ? 3 : 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: darkGreen, width: 2),
+          borderSide: BorderSide(color: highContrast ? Colors.white : primaryGreen, width: 3),
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: highContrast ? Colors.black : const Color(0xFF2A2A2A),
       ),
-      
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: Colors.white,
-        selectedItemColor: darkGreen,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        elevation: 0,
-      ),
+    );
+  }
+
+  static TextTheme _makeHighContrastText(TextTheme base, Color color) {
+    return base.copyWith(
+      displayLarge: base.displayLarge?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.displayLarge?.fontSize ?? 32) * 1.1),
+      displayMedium: base.displayMedium?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.displayMedium?.fontSize ?? 28) * 1.1),
+      headlineLarge: base.headlineLarge?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.headlineLarge?.fontSize ?? 24) * 1.1),
+      headlineMedium: base.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.headlineMedium?.fontSize ?? 20) * 1.1),
+      titleLarge: base.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.titleLarge?.fontSize ?? 18) * 1.1),
+      bodyLarge: base.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.bodyLarge?.fontSize ?? 16) * 1.1),
+      bodyMedium: base.bodyMedium?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.bodyMedium?.fontSize ?? 14) * 1.1),
+      labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: color, fontSize: (base.labelLarge?.fontSize ?? 14) * 1.1),
     );
   }
 }
